@@ -1,3 +1,4 @@
-tqdm
-pymystem3
+pymystem3==0.1.5
 pandas=0.20.3
+numpy==1.13.3
+gensim==0.13.3
