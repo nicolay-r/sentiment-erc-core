@@ -5,42 +5,14 @@ from sklearn import svm, neighbors, ensemble, model_selection, naive_bayes
 from core.evaluation.eval import Evaluator
 from core.evaluation.labels import Label, NeutralLabel
 from core.evaluation.statistic import MethodStatistic
+from core.processing.lemmatization.base import Stemmer
 from core.source.vectors import OpinionVectorCollection
-from core.source.opinion import OpinionCollection, Opinion
+from core.source.opinion import OpinionCollection
 from core.source.synonyms import SynonymsCollection
 
 
-def apply_classifier(train_vectors_list, test_vectors_list, estimator,
-        files_to_compare_list, method_name, method_root, synonyms_filepath):
-    """
-        Train classifier using 'train_vectors_list' and then apply it for
-        'test_vectors_list' test file.
-
-        train_vector_list: list str
-        test_vector_list: list str
-        method_name: str
-        synonyms_filepath: str
-    """
-    assert(type(train_vectors_list) == list)
-    assert(type(test_vectors_list) == list)
-    assert(type(method_name) == list)
-
-    X_train, y_train = create_train_data(train_vector_list)
-    X_test, test_collections = create_test_data(test_vectors_list)
-
-    test_opinions = fit_and_predict(
-            method_name, estimator, X_train, y_train, X_test,
-            test_collections, synonyms_filepath)
-    io_utils.save_test_opinions(test_opinions, method_name, indices=test_indices)
-
-    edf = evaluate(CLASSIFIERS[method_name], method_name,
-                   files_to_compare_list, method_root, synonyms_filepath)
-
-    return edf
-
-
 def create_train_data(vectors_filepath_list):
-    assert(type(vectors_filepath_list) == list)
+    assert(isinstance(vectors_filepath_list, list))
     X_train = []
     y_train = []
     for vector_filepath in vectors_filepath_list:
@@ -52,7 +24,7 @@ def create_train_data(vectors_filepath_list):
 
 
 def create_test_data(vectors_filepath_list):
-    assert(type(vectors_filepath_list) == list)
+    assert(isinstance(vectors_filepath_list, list))
     X_test = []
     test_collections = []
     for vector_filepath in vectors_filepath_list:
@@ -63,16 +35,23 @@ def create_test_data(vectors_filepath_list):
     return X_test, test_collections
 
 
-def evaluate(estimator, method_name, files_to_compare_list,
-             method_root_filepath, synonyms_filepath):
+def evaluate(estimator,
+             method_name,
+             stemmer,
+             files_to_compare_list,
+             method_root_filepath,
+             synonyms_filepath):
+
+    assert(isinstance(stemmer, Stemmer))
 
     df = MethodStatistic.get_method_statistic(
             files_to_compare_list,
-            synonyms_filepath)
+            synonyms_filepath,
+            stemmer)
 
     df.index.name = method_name
 
-    e = Evaluator(synonyms_filepath, method_root_filepath)
+    e = Evaluator(synonyms_filepath, method_root_filepath, stemmer=stemmer)
     r = e.evaluate(files_to_compare_list)
 
     for c in Evaluator.get_result_columns():
@@ -114,6 +93,14 @@ def get_estimator_settings(method):
         return {
             'n_neighbors': method.n_neighbors
         }
+    elif isinstance(method, ensemble.GradientBoostingClassifier):
+        return {
+           'n_estimators': method.n_estimators,
+           'max_depth': method.max_depth,
+           'min_samples_split': method.min_samples_split,
+           'min_samples_leaf': method.min_samples_leaf,
+           'subsample': method.subsample
+        }
     elif isinstance(method, model_selection.GridSearchCV):
         result = method.best_params_
         result['cv'] = method.cv
@@ -123,10 +110,17 @@ def get_estimator_settings(method):
     return None
 
 
-def fit_and_predict(method_path, estimator, X_train, y_train, X_test,
-                    test_collections, synonyms_filepath):
-    """ Fitting the approptiate method and then predicting
+def fit_and_predict(method_path, estimator, stemmer,
+                    X_train, y_train,
+                    X_test, test_collections,
+                    synonyms_filepath):
     """
+    Fitting the approptiate method and then predicting
+
+    stemmer: Stemmer
+    """
+    assert(isinstance(stemmer, Stemmer))
+
     estimator.fit(X_train, y_train)
 
     labels = estimator.predict(X_test)
@@ -139,25 +133,26 @@ def fit_and_predict(method_path, estimator, X_train, y_train, X_test,
             [str(np.count_nonzero(labels == c)) for c in [-1, 0, 1]]
         ))
 
-    return create_test_opinions(test_collections, labels, synonyms_filepath)
+    return create_test_opinions(test_collections, labels, synonyms_filepath, stemmer)
 
 
-def create_test_opinions(test_collections, labels, synonyms_filepath):
-    assert(type(test_collections) == list)
-    assert(type(labels) == np.ndarray)
+def create_test_opinions(test_collections, labels, synonyms_filepath, stemmer):
+    assert(isinstance(test_collections, list))
+    assert(isinstance(labels, np.ndarray))
+    assert(isinstance(stemmer, Stemmer))
 
     label_index = 0
     opinion_collection_list = []
+    synonyms = SynonymsCollection.from_file(synonyms_filepath, stemmer=stemmer)
 
-    synonyms = SynonymsCollection.from_file(synonyms_filepath)
     for c in test_collections:
-        opinions = OpinionCollection(None, synonyms)
+        opinions = OpinionCollection(None, synonyms, stemmer)
         for opinion_vector in c:
             l = Label.from_int(int(labels[label_index]))
             opinion_vector.set_label(l)
-            o = Opinion(opinion_vector.value_left,
-                        opinion_vector.value_right,
-                        opinion_vector.label)
+            o = opinions.create_opinion(opinion_vector.value_left,
+                                        opinion_vector.value_right,
+                                        opinion_vector.label)
 
             if not opinions.has_opinion_by_synonyms(o) and not isinstance(l, NeutralLabel):
                 opinions.add_opinion(o)
@@ -169,7 +164,7 @@ def create_test_opinions(test_collections, labels, synonyms_filepath):
     return opinion_collection_list
 
 
-def filter_features(model_name, model, X_train, X_test):
+def filter_features(model, X_train, X_test):
     X_train = np.array(X_train)
     X_test = np.array(X_test)
     print X_test.shape
@@ -185,7 +180,7 @@ def filter_features_by_mask(X_train, X_test, mask):
         mask : list
             list of boolean values
     """
-    assert(type(mask) == list)
+    assert(isinstance(mask, list))
     X_train = np.array(X_train)
     X_test = np.array(X_test)
     print X_train.shape

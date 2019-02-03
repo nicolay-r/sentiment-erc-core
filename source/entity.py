@@ -1,14 +1,24 @@
 # -*- coding: utf-8 -*-
 import io
-import core.env as env
+from core.processing.lemmatization.base import Stemmer
 
 
 class EntityCollection:
     """ Collection of annotated entities
     """
 
-    def __init__(self, entities):
+    def __init__(self, entities, stemmer):
+        """
+        entities: list of Entity types
+        stemmer: Stemmer
+        """
+        assert(isinstance(entities, list))
+        assert(isinstance(stemmer, Stemmer))
+
+        entities.sort(key=lambda e: e.begin)
+
         self.entities = entities
+        self.stemmer = stemmer
         self.by_id = self._index_by_id()
         self.by_lemmas = self._index_by_lemmas()
 
@@ -21,7 +31,7 @@ class EntityCollection:
     def _index_by_lemmas(self):
         index = {}
         for e in self.entities:
-            key = self._create_lemma(e.value)
+            key = self.stemmer.lemmatize_to_str(e.value)
             if key in index:
                 index[key].append(e.ID)
             else:
@@ -29,9 +39,10 @@ class EntityCollection:
         return index
 
     @classmethod
-    def from_file(cls, filepath):
+    def from_file(cls, filepath, stemmer):
         """ Read annotation collection from file
         """
+        assert(isinstance(stemmer, Stemmer))
         entities = []
         with io.open(filepath, "r", encoding='utf-8') as f:
             for line in f.readlines():
@@ -46,14 +57,11 @@ class EntityCollection:
 
                 entities.append(a)
 
-        # sort by beginning
-        entities.sort(key=lambda e: e.begin)
-
-        return cls(entities)
+        return cls(entities, stemmer)
 
     def has_entity_by_value(self, entity_value):
         assert(type(entity_value) == unicode)
-        lemma = self._create_lemma(entity_value)
+        lemma = self.stemmer.lemmatize_to_str(entity_value)
         return lemma in self.by_lemmas
 
     def get_entity_by_index(self, index):
@@ -65,7 +73,7 @@ class EntityCollection:
 
     def get_entity_by_value(self, entity_value):
         assert(type(entity_value) == unicode)
-        lemma = self._create_lemma(entity_value)
+        lemma = self.stemmer.lemmatize_to_str(entity_value)
         return self.by_lemmas[lemma]
 
     def get_previous_entity(self, entity):
@@ -80,10 +88,6 @@ class EntityCollection:
             return self.entities[index+1]
         return None
 
-    def _create_lemma(self, entity_value):
-        assert(type(entity_value) == unicode)
-        return env.stemmer.lemmatize_to_str(entity_value)
-
     def count(self):
         return len(self.entities)
 
@@ -92,6 +96,7 @@ class EntityCollection:
             yield a
 
 
+# TODO. Crate this element from collection (because of stemmer instance)
 class Entity:
     """ Entity description.
     """

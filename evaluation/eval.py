@@ -4,7 +4,7 @@ import pandas as pd
 
 from core.evaluation.labels import PositiveLabel, NegativeLabel, NeutralLabel
 from core.evaluation.statistic import FilesToCompare
-from core.processing.stemmer import Stemmer
+from core.processing.lemmatization.base import Stemmer
 from core.source.opinion import OpinionCollection
 
 
@@ -26,10 +26,12 @@ class Evaluator:
     C_RES = 'how_results'
     C_CMP = 'comparison'
 
-    def __init__(self, synonyms_filepath, user_answers_filepath):
+    def __init__(self, synonyms_filepath, user_answers_filepath, stemmer):
+        assert(isinstance(stemmer, Stemmer)) # for opinion collections
+
         self.synonyms_filepath = synonyms_filepath
         self.user_answers = user_answers_filepath
-        self.stemmer = Stemmer()
+        self.stemmer = stemmer
 
         self.pos = PositiveLabel()
         self.neg = NegativeLabel()
@@ -73,10 +75,10 @@ class Evaluator:
         pos_recall = self._calcRecall(results, pos_answers, self.pos)
         neg_recall = self._calcRecall(results, neg_answers, self.neg)
 
-        assert(type(pos_prec) == float)
-        assert(type(neg_prec) == float)
-        assert(type(pos_recall) == float)
-        assert(type(neg_recall) == float)
+        assert(isinstance(pos_prec, float))
+        assert(isinstance(neg_prec, float))
+        assert(isinstance(pos_recall, float))
+        assert(isinstance(neg_recall, float))
 
         return pos_prec, neg_prec, pos_recall, neg_recall
 
@@ -124,11 +126,15 @@ class Evaluator:
 
         # Reading test answers.
         test_opins = OpinionCollection.from_file(
-                files_to_compare.test_filepath, self.synonyms_filepath)
+            files_to_compare.test_filepath,
+            self.synonyms_filepath,
+            stemmer=self.stemmer)
 
         # Reading etalon answers.
         etalon_opins = OpinionCollection.from_file(
-                files_to_compare.etalon_filepath, self.synonyms_filepath)
+            files_to_compare.etalon_filepath,
+            self.synonyms_filepath,
+            stemmer=self.stemmer)
 
         if debug:
             print "{} <-> {}, {}".format(
@@ -154,7 +160,7 @@ class Evaluator:
     def evaluate(self, files_to_compare_list, debug=False):
         """ Main evaluation subprogram
         """
-        assert(type(files_to_compare_list) == list)
+        assert(isinstance(files_to_compare_list, list))
 
         pos_prec, neg_prec, pos_recall, neg_recall = (0, 0, 0, 0)
 
