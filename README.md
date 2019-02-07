@@ -1,8 +1,8 @@
-# Description
+# re-core 0.19.1
 ![](https://img.shields.io/badge/Python-2.7-brightgreen.svg)
 
 This project is a core library for
-[RuSentRel](https://github.com/nicolay-r/RuSentRel) dataset processing.
+[RuSentRel](https://github.com/nicolay-r/RuSentRel) dataset processing and sentiment relation extraction task between mentioned named entities in text.
 This library provides API for synonyms, news, opinions, entities files reading.
 
 ## Source
@@ -23,16 +23,14 @@ This core provides an additional wrappers for:
 ### Named entities recognition (NER)
 
 Provides wrappers for:
-1. [DeepPavlov](https://github.com/deepmipt/ner)
+1. DeepPavlov [[repo](https://github.com/deepmipt/ner)]
 2. [Texterra](https://texterra.ispras.ru/)
 
 ### Syntax parser
 
 Provides wrappers for:
-1. INemo SyntaxNet
-2. Texterra syntax parser
-
-
+1. INemo SyntaxNet [[repo](https://github.com/IINemo/syntaxnet_wrapper)]
+2. Texterra syntax parser [[Texterra](https://texterra.ispras.ru/)]
 
 ## Installation
 
